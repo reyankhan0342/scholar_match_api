@@ -1,0 +1,87 @@
+<?php
+
+namespace App\Http\Controllers\Api\V1;
+
+use App\Http\Controllers\Controller;
+use App\Models\StudentResearchProfile;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+
+class StudentResearchProfileController extends Controller
+{
+    public function show(Request $request): JsonResponse
+    {
+        $profile = StudentResearchProfile::query()
+            ->where('user_id', $request->user()->id)
+            ->first();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Research profile retrieved successfully.',
+            'data' => [
+                'research_profile' => $profile,
+            ],
+        ]);
+    }
+
+    public function update(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'research_title' => [
+                'sometimes', 'nullable', 'string', 'max:255',
+            ],
+            'research_summary' => [
+                'sometimes', 'nullable', 'string', 'max:5000',
+            ],
+            'research_interests' => [
+                'sometimes', 'nullable', 'array', 'max:30',
+            ],
+            'research_interests.*' => [
+                'required', 'string', 'max:150',
+            ],
+            'research_keywords' => [
+                'sometimes', 'nullable', 'array', 'max:50',
+            ],
+            'research_keywords.*' => [
+                'required', 'string', 'max:100',
+            ],
+            'preferred_research_fields' => [
+                'sometimes', 'nullable', 'array', 'max:30',
+            ],
+            'preferred_research_fields.*' => [
+                'required', 'string', 'max:150',
+            ],
+            'research_experience' => [
+                'sometimes', 'nullable', 'string', 'max:5000',
+            ],
+            'research_goals' => [
+                'sometimes', 'nullable', 'string', 'max:5000',
+            ],
+            'preferred_methodology' => [
+                'sometimes', 'nullable', 'string', 'max:2000',
+            ],
+        ]);
+
+        $user = $request->user();
+
+        $profile = StudentResearchProfile::query()
+            ->where('user_id', $user->id)
+            ->first();
+
+        if (!$profile) {
+            $profile = new StudentResearchProfile();
+            $profile->user()->associate($user);
+        }
+
+        $profile->fill($validated);
+        $profile->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Research profile saved successfully.',
+            'data' => [
+                'research_profile' => $profile->fresh(),
+            ],
+        ]);
+    }
+}

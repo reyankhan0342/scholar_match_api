@@ -1,0 +1,268 @@
+
+<?php
+
+use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\StudentProfileController;
+use App\Http\Controllers\Api\V1\StudentEducationController;
+use App\Http\Controllers\Api\V1\StudentEducationDocumentController;
+use App\Http\Controllers\Api\V1\StudentResearchProfileController;
+use App\Http\Controllers\Api\V1\StudentResearchProposalController;
+use App\Http\Controllers\Api\V1\StudentResearchProposalDocumentController;
+use App\Http\Controllers\Api\V1\StudentCvController;
+use App\Http\Controllers\Api\V1\StudentWorkExperienceController;
+use App\Http\Controllers\Api\V1\StudentProjectController;
+use App\Http\Controllers\Api\V1\StudentCertificationController;
+use App\Http\Controllers\Api\V1\StudentPublicationController;
+use App\Http\Controllers\Api\V1\MyProfileController;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
+
+Route::get('/health', function () {
+    return response()->json([
+        'success' => true,
+        'message' => 'ScholarMatch API is running',
+    ]);
+});
+
+Route::get('/user', function (Request $request) {
+    return $request->user();
+})->middleware('auth:sanctum');
+
+Route::prefix('v1')->group(function () {
+
+    Route::prefix('auth')->group(function () {
+
+        Route::post('/register', [
+            AuthController::class, 'register',
+        ])->middleware('throttle:5,1');
+
+        Route::post('/login', [
+            AuthController::class, 'login',
+        ])->middleware('throttle:10,1');
+
+        Route::middleware('auth:sanctum')->group(function () {
+            Route::get('/me', [
+                AuthController::class, 'me',
+            ]);
+
+            Route::post('/logout', [
+                AuthController::class, 'logout',
+            ]);
+        });
+    });
+
+    Route::middleware('auth:sanctum')->group(function () {
+
+        // Complete Student Profile
+        Route::get('/my-profile', [
+            MyProfileController::class, 'show',
+        ]);
+
+        // Personal Profile
+        Route::get('/profile', [
+            StudentProfileController::class, 'show',
+        ]);
+
+        Route::put('/profile', [
+            StudentProfileController::class, 'update',
+        ]);
+
+        // Academic Education
+        Route::get('/educations', [
+            StudentEducationController::class, 'index',
+        ]);
+
+        Route::post('/educations', [
+            StudentEducationController::class, 'store',
+        ]);
+
+        Route::get('/educations/{id}', [
+            StudentEducationController::class, 'show',
+        ])->whereNumber('id');
+
+        Route::put('/educations/{id}', [
+            StudentEducationController::class, 'update',
+        ])->whereNumber('id');
+
+        Route::delete('/educations/{id}', [
+            StudentEducationController::class, 'destroy',
+        ])->whereNumber('id');
+
+        // Academic Documents
+        Route::post(
+            '/educations/{id}/documents/{type}',
+            [StudentEducationDocumentController::class, 'upload']
+        )->whereNumber('id')
+         ->whereIn('type', ['degree', 'transcript']);
+
+        Route::get(
+            '/educations/{id}/documents/{type}',
+            [StudentEducationDocumentController::class, 'view']
+        )->whereNumber('id')
+         ->whereIn('type', ['degree', 'transcript']);
+
+        Route::get(
+            '/educations/{id}/documents/{type}/download',
+            [StudentEducationDocumentController::class, 'download']
+        )->whereNumber('id')
+         ->whereIn('type', ['degree', 'transcript']);
+
+        Route::delete(
+            '/educations/{id}/documents/{type}',
+            [StudentEducationDocumentController::class, 'destroy']
+        )->whereNumber('id')
+         ->whereIn('type', ['degree', 'transcript']);
+
+        // Research Profile
+        Route::get('/research-profile', [
+            StudentResearchProfileController::class, 'show',
+        ]);
+
+        Route::put('/research-profile', [
+            StudentResearchProfileController::class, 'update',
+        ]);
+
+        // Research Proposals
+        Route::get('/research-proposals', [
+            StudentResearchProposalController::class, 'index',
+        ]);
+
+        Route::post('/research-proposals', [
+            StudentResearchProposalController::class, 'store',
+        ]);
+
+        Route::get('/research-proposals/{id}', [
+            StudentResearchProposalController::class, 'show',
+        ])->whereNumber('id');
+
+        Route::put('/research-proposals/{id}', [
+            StudentResearchProposalController::class, 'update',
+        ])->whereNumber('id');
+
+        Route::delete('/research-proposals/{id}', [
+            StudentResearchProposalController::class, 'destroy',
+        ])->whereNumber('id');
+
+        // Research Proposal Documents
+        Route::post(
+            '/research-proposals/{id}/document',
+            [StudentResearchProposalDocumentController::class, 'upload']
+        )->whereNumber('id');
+
+        Route::get(
+            '/research-proposals/{id}/document',
+            [StudentResearchProposalDocumentController::class, 'view']
+        )->whereNumber('id');
+
+        Route::get(
+            '/research-proposals/{id}/document/download',
+            [StudentResearchProposalDocumentController::class, 'download']
+        )->whereNumber('id');
+
+        Route::delete(
+            '/research-proposals/{id}/document',
+            [StudentResearchProposalDocumentController::class, 'destroy']
+        )->whereNumber('id');
+
+        // Student CV
+        Route::get('/cv', [
+            StudentCvController::class, 'show',
+        ]);
+
+        Route::post('/cv', [
+            StudentCvController::class, 'upload',
+        ]);
+
+        Route::get('/cv/download', [
+            StudentCvController::class, 'download',
+        ]);
+
+        Route::delete('/cv', [
+            StudentCvController::class, 'destroy',
+        ]);
+
+        // Work Experience
+        Route::get('/work-experiences', [
+            StudentWorkExperienceController::class, 'index',
+        ]);
+
+        Route::post('/work-experiences', [
+            StudentWorkExperienceController::class, 'store',
+        ]);
+
+        Route::get('/work-experiences/{id}', [
+            StudentWorkExperienceController::class, 'show',
+        ])->whereNumber('id');
+
+        Route::put('/work-experiences/{id}', [
+            StudentWorkExperienceController::class, 'update',
+        ])->whereNumber('id');
+
+        Route::delete('/work-experiences/{id}', [
+            StudentWorkExperienceController::class, 'destroy',
+        ])->whereNumber('id');
+
+        // Academic Projects
+        Route::get('/projects', [
+            StudentProjectController::class, 'index',
+        ]);
+
+        Route::post('/projects', [
+            StudentProjectController::class, 'store',
+        ]);
+
+        Route::get('/projects/{id}', [
+            StudentProjectController::class, 'show',
+        ])->whereNumber('id');
+
+        Route::put('/projects/{id}', [
+            StudentProjectController::class, 'update',
+        ])->whereNumber('id');
+
+        Route::delete('/projects/{id}', [
+            StudentProjectController::class, 'destroy',
+        ])->whereNumber('id');
+
+        // Certifications
+        Route::get('/certifications', [
+            StudentCertificationController::class, 'index',
+        ]);
+
+        Route::post('/certifications', [
+            StudentCertificationController::class, 'store',
+        ]);
+
+        Route::get('/certifications/{id}', [
+            StudentCertificationController::class, 'show',
+        ])->whereNumber('id');
+
+        Route::put('/certifications/{id}', [
+            StudentCertificationController::class, 'update',
+        ])->whereNumber('id');
+
+        Route::delete('/certifications/{id}', [
+            StudentCertificationController::class, 'destroy',
+        ])->whereNumber('id');
+
+        // Research Publications
+        Route::get('/publications', [
+            StudentPublicationController::class, 'index',
+        ]);
+
+        Route::post('/publications', [
+            StudentPublicationController::class, 'store',
+        ]);
+
+        Route::get('/publications/{id}', [
+            StudentPublicationController::class, 'show',
+        ])->whereNumber('id');
+
+        Route::put('/publications/{id}', [
+            StudentPublicationController::class, 'update',
+        ])->whereNumber('id');
+
+        Route::delete('/publications/{id}', [
+            StudentPublicationController::class, 'destroy',
+        ])->whereNumber('id');
+    });
+});

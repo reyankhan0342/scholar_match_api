@@ -1,0 +1,189 @@
+
+<?php
+
+namespace App\Http\Controllers\Api\V1;
+
+use App\Http\Controllers\Controller;
+use App\Models\StudentEducation;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
+
+class StudentEducationDocumentController extends Controller
+{
+    public function upload(
+        Request $request,
+        int $id,
+        string $type
+    ): JsonResponse {
+        $education = $this->findEducation($request, $id);
+
+        $request->validate([
+            'file' => [
+                'required',
+                'file',
+                'mimes:pdf,jpg,jpeg,png',
+                'max:10240',
+            ],
+        ]);
+
+        $field = $this->documentField($type);
+        $oldPath = $education->{$field};
+
+        $directory = 'student-documents/'
+            . $request->user()->id
+            . '/educations/'
+            . $education->id;
+
+        $newPath = $request->file('file')->store(
+            $directory,
+            'local'
+        );
+
+        if ($newPath === false) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Document upload failed.',
+            ], 500);
+        }
+
+        try {
+            $education->{$field} = $newPath;
+            $education->save();
+        } catch (Throwable $exception) {
+            Storage::disk('local')->delete($newPath);
+            throw $exception;
+        }
+
+        if ($oldPath && $oldPath !== $newPath) {
+            Storage::disk('local')->delete($oldPath);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => ucfirst($type)
+                . ' document uploaded successfully.',
+            'data' => [
+                'education_id' => $education->id,
+                'document_type' => $type,
+                'uploaded' => true,
+            ],
+        ]);
+    }
+
+    public function view(
+        Request $request,
+        int $id,
+        string $type
+    ): StreamedResponse {
+        $path = $this->findDocumentPath(
+            $request,
+            $id,
+            $type
+        );
+
+        $extension = pathinfo(
+            $path,
+            PATHINFO_EXTENSION
+        );
+
+        return Storage::disk('local')->response(
+            $path,
+            $type . '-' . $id . '.' . $extension,
+            ['X-Content-Type-Options' => 'nosniff'],
+            'inline'
+        );
+    }
+
+    public function download(
+        Request $request,
+        int $id,
+        string $type
+    ): StreamedResponse {
+        $path = $this->findDocumentPath(
+            $request,
+            $id,
+            $type
+        );
+
+        $extension = pathinfo(
+            $path,
+            PATHINFO_EXTENSION
+        );
+
+        return Storage::disk('local')->download(
+            $path,
+            $type . '-' . $id . '.' . $extension,
+            ['X-Content-Type-Options' => 'nosniff']
+        );
+    }
+
+    public function destroy(
+        Request $request,
+        int $id,
+        string $type
+    ): JsonResponse {
+        $education = $this->findEducation($request, $id);
+        $field = $this->documentField($type);
+        $path = $education->{$field};
+
+        if (!$path) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Document not found.',
+            ], 404);
+        }
+
+        $education->{$field} = null;
+        $education->save();
+
+        Storage::disk('local')->delete($path);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Document deleted successfully.',
+        ]);
+    }
+
+    private function findEducation(
+        Request $request,
+        int $id
+    ): StudentEducation {
+        return StudentEducation::query()
+            ->where('user_id', $request->user()->id)
+            ->findOrFail($id);
+    }
+
+    private function documentField(string $type): string
+    {
+        abort_unless(
+            in_array($type, ['degree', 'transcript'], true),
+            404
+        );
+
+        return $type === 'degree'
+            ? 'degree_file_path'
+            : 'transcript_file_path';
+    }
+
+    private function findDocumentPath(
+        Request $request,
+        int $id,
+        string $type
+    ): string {
+        $education = $this->findEducation($request, $id);
+
+        $field = $this->documentField($type);
+        $path = $education->{$field};
+
+        abort_if(
+            !$path || !Storage::disk('local')->exists($path),
+            404,
+            'Document not found.'
+        );
+
+        return $path;
+    }
+}

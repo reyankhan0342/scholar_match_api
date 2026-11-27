@@ -1,0 +1,195 @@
+
+<?php
+
+namespace App\Http\Controllers\Api\V1;
+
+use App\Http\Controllers\Controller;
+use App\Models\StudentResearchProposal;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
+
+class StudentResearchProposalDocumentController extends Controller
+{
+    public function upload(
+        Request $request,
+        int $id
+    ): JsonResponse {
+        $proposal = $this->findProposal($request, $id);
+
+        $request->validate([
+            'file' => [
+                'required',
+                'file',
+                'mimes:pdf,doc,docx',
+                'max:2048',
+            ],
+        ]);
+
+        $file = $request->file('file');
+
+        $extension = strtolower(
+            pathinfo($file->getClientOriginalName(), PATHINFO_EXTENSION)
+        );
+
+        if (!in_array($extension, ['pdf', 'doc', 'docx'], true)) {
+            throw ValidationException::withMessages([
+                'file' => ['Only PDF, DOC and DOCX files are allowed.'],
+            ]);
+        }
+
+        $directory = 'student-proposals/'
+            . $request->user()->id
+            . '/'
+            . $proposal->id;
+
+        $newPath = $file->store($directory, 'local');
+
+        if ($newPath === false) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Document upload failed.',
+            ], 500);
+        }
+
+        $oldPath = $proposal->document_file_path;
+
+        $originalName = basename(
+            str_replace('\\', '/', $file->getClientOriginalName())
+        );
+
+        try {
+            $proposal->forceFill([
+                'document_file_path' => $newPath,
+                'original_file_name' => mb_substr(
+                    $originalName,
+                    0,
+                    255
+                ),
+                'mime_type' => $file->getMimeType(),
+                'file_size' => $file->getSize(),
+            ])->save();
+        } catch (Throwable $exception) {
+            Storage::disk('local')->delete($newPath);
+            throw $exception;
+        }
+
+        if ($oldPath && $oldPath !== $newPath) {
+            Storage::disk('local')->delete($oldPath);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Proposal document uploaded successfully.',
+            'data' => [
+                'proposal' => $proposal->fresh(),
+            ],
+        ]);
+    }
+
+    public function view(
+        Request $request,
+        int $id
+    ): StreamedResponse {
+        $proposal = $this->findProposal($request, $id);
+        $path = $this->getDocumentPath($proposal);
+
+        $extension = strtolower(
+            pathinfo($path, PATHINFO_EXTENSION)
+        );
+
+        $headers = [
+            'X-Content-Type-Options' => 'nosniff',
+            'Cache-Control' => 'private, no-store',
+        ];
+
+        if ($extension !== 'pdf') {
+            return Storage::disk('local')->download(
+                $path,
+                "proposal-{$id}.{$extension}",
+                $headers
+            );
+        }
+
+        return Storage::disk('local')->response(
+            $path,
+            "proposal-{$id}.pdf",
+            array_merge($headers, [
+                'Content-Type' => 'application/pdf',
+            ]),
+            'inline'
+        );
+    }
+
+    public function download(
+        Request $request,
+        int $id
+    ): StreamedResponse {
+        $proposal = $this->findProposal($request, $id);
+        $path = $this->getDocumentPath($proposal);
+
+        $extension = strtolower(
+            pathinfo($path, PATHINFO_EXTENSION)
+        );
+
+        return Storage::disk('local')->download(
+            $path,
+            "proposal-{$id}.{$extension}",
+            [
+                'X-Content-Type-Options' => 'nosniff',
+                'Cache-Control' => 'private, no-store',
+            ]
+        );
+    }
+
+    public function destroy(
+        Request $request,
+        int $id
+    ): JsonResponse {
+        $proposal = $this->findProposal($request, $id);
+        $path = $this->getDocumentPath($proposal);
+
+        $proposal->forceFill([
+            'document_file_path' => null,
+            'original_file_name' => null,
+            'mime_type' => null,
+            'file_size' => null,
+        ])->save();
+
+        Storage::disk('local')->delete($path);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Proposal document deleted successfully.',
+            'data' => [
+                'proposal' => $proposal->fresh(),
+            ],
+        ]);
+    }
+
+    private function findProposal(
+        Request $request,
+        int $id
+    ): StudentResearchProposal {
+        return StudentResearchProposal::query()
+            ->where('user_id', $request->user()->id)
+            ->findOrFail($id);
+    }
+
+    private function getDocumentPath(
+        StudentResearchProposal $proposal
+    ): string {
+        $path = $proposal->document_file_path;
+
+        abort_if(
+            !$path || !Storage::disk('local')->exists($path),
+            404,
+            'Proposal document not found.'
+        );
+
+        return $path;
+    }
+}
